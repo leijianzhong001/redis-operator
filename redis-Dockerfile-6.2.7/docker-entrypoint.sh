@@ -100,40 +100,49 @@ set_redis_password() {
     fi
 }
 
-# 写集群配置
-redis_mode_setup() {
-  # cluster模式启动
-  if [ "${SETUP_MODE}" = "cluster" ]; then
-    # 如果redis.conf配置文件不存在，则创建初始化配置
-    if [ ! -e "${DATA_DIR}/redis.conf" ]; then
-      echo "${DATA_DIR}/redis.conf" "is not exists, current cluster first startup, create ${DATA_DIR}/redis.conf"
-
-      # 1、写入扩展配置
-      if [ -f "${EXTERNAL_CONFIG_FILE}" ]; then
-        external_config
-      fi
-
-      # 2、写入集群配置
-      write_cluster_config
-
-      # 3、创建acl文件
-      create_users_acl
-    fi
-
-    # 5、设置default用户密码
-    set_redis_password
-
-    # 4、写入最新ip到node.conf文件
-    write_pod_ip
-  else
+redis_standalone_setup() {
     echo "Setting up redis in standalone mode"
-  fi
 }
 
-# 从此处开始，就是redis用户在执行了
-redis_mode_setup
+redis_cluster_setup() {
+      echo "Setting up redis in cluster mode"
+
+      # 如果redis.conf配置文件不存在，则创建初始化配置
+      if [ ! -e "${DATA_DIR}/redis.conf" ]; then
+        echo "${DATA_DIR}/redis.conf" "is not exists, current cluster first startup, create ${DATA_DIR}/redis.conf"
+
+        # 1、写入扩展配置
+        if [ -f "${EXTERNAL_CONFIG_FILE}" ]; then
+          external_config
+        fi
+
+        # 2、写入集群配置
+        write_cluster_config
+
+        # 3、创建acl文件
+        create_users_acl
+      fi
+
+      # 5、设置default用户密码
+      set_redis_password
+
+      # 4、写入最新ip到node.conf文件
+      write_pod_ip
+
+      # todo 写入持久化配置
+}
+
+main_function() {
+    # cluster模式启动
+    if [ "${SETUP_MODE}" = "cluster" ]; then
+      redis_cluster_setup
+    else
+      redis_standalone_setup
+    fi
+}
 
 
+main_function
 # `$@`前面有个exec，会用`redis-server`命令启动的进程取代当前的`docker-entrypoint.sh`进程，所以，最终redis进程的PID等于1，`而docker-entrypoint.sh`这个脚本的进程已经被替代，因此就结束掉了；
 # exec redis-server /etc/redis/redis.conf
 exec "$@"

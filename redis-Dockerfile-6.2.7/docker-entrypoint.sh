@@ -45,6 +45,7 @@ fi
 
 EXTERNAL_CONFIG_FILE=${EXTERNAL_CONFIG_FILE:-"/etc/redis/external.conf.d/redis-external.conf"}
 DATA_DIR=${DATA_DIR:-"/data"}
+POD_INFO_MEMORY_LIMIT="/etc/pod-info/memory_limit"
 
 #输出一下指定的用户信息
 current_user="$(id)"
@@ -58,15 +59,13 @@ external_config() {
   # 这个配置添加到文件第一行，防止覆盖默认配置 sed -i "1i\include ${EXTERNAL_CONFIG_FILE}" "${DATA_DIR}/redis.conf"
 }
 
-write_cluster_config(){
+write_cluster_config() {
   {
     echo cluster-enabled yes
     echo cluster-node-timeout 15000
     echo cluster-require-full-coverage no
     echo cluster-migration-barrier 1
     echo cluster-config-file "${DATA_DIR}/nodes.conf"
-    echo aclfile "${DATA_DIR}/users.acl"
-    echo acl-pubsub-default resetchannels
   } >>"${DATA_DIR}/redis.conf"
 }
 
@@ -81,66 +80,165 @@ write_pod_ip() {
   fi
 }
 
-create_users_acl(){
+write_acl_config() {
+  {
+    echo aclfile "${DATA_DIR}/users.acl"
+    echo acl-pubsub-default resetchannels
+  } >>"${DATA_DIR}/redis.conf"
+  # 创建users.acl文件，必须主动创建，否则会启动失败
   touch "${DATA_DIR}/users.acl"
 }
 
 # 重要提示：从Redis 6开始，"requirepass "只是新ACL系统之上的一个兼容层。该选项的作用只是为default用户设置密码。
 # 客户端仍将像往常一样使用AUTH <password>进行认证，或者更明确地使用AUTH default <password>，如果他们遵循新的协议：两者都可以工作。requirepass 与 aclfile 选项和 ACL LOAD 命令不兼容，这些将导致 requirepass 被忽略
-set_redis_password() {
-    if [ -z "${REDIS_PASSWORD}" ]; then
-        echo "Redis is running without password which is not recommended"
-    else
-      sed -i '/masterauth/d' "${DATA_DIR}/redis.conf"
-      sed -i '/requirepass/d' "${DATA_DIR}/redis.conf"
-      {
-          echo masterauth "${REDIS_PASSWORD}"
-          echo requirepass "${REDIS_PASSWORD}"
-      } >>"${DATA_DIR}/redis.conf"
-    fi
+write_redis_password() {
+  if [ -z "${REDIS_PASSWORD}" ]; then
+    echo "Redis is running without password which is not recommended"
+  else
+    sed -i '/masterauth/d' "${DATA_DIR}/redis.conf"
+    sed -i '/requirepass/d' "${DATA_DIR}/redis.conf"
+    {
+      echo masterauth "${REDIS_PASSWORD}"
+      echo requirepass "${REDIS_PASSWORD}"
+    } >>"${DATA_DIR}/redis.conf"
+  fi
+}
+
+# write_persistence_config 写入持久化配置
+write_persistence_config() {
+  {
+    echo save ""
+    echo appendonly no
+    echo appendfilename "appendonly.aof"
+  } >>"${DATA_DIR}/redis.conf"
+}
+
+# write_log_config 写入日志相关配置
+write_log_config() {
+  {
+    echo loglevel notice
+    echo logfile "${DATA_DIR}/redis.log"
+  } >>"${DATA_DIR}/redis.conf"
+}
+
+# write_maxmemory_config 写入maxmemory配置
+write_maxmemory_config() {
+    # 设置maxmemory
+    pod_memory_limit=$(sed -n '1p' "${POD_INFO_MEMORY_LIMIT}" | sed 's/[ \t]*//g')
+    my_maxmemory=$(echo "$pod_memory_limit $MEMORY_RATIO" | awk '{printf("%.0f",$1*$2)}')
+    echo "---I--- Config maxmemory is $my_maxmemory byte!"
+    sed -i '/maxmemory/d' "${DATA_DIR}"/redis.conf
+    echo "maxmemory ${my_maxmemory}" >>"${DATA_DIR}/redis.conf"
+}
+
+# write_dir_config 写入dir
+write_dir_config() {
+    {
+      echo dir "/data"
+    } >>"${DATA_DIR}/redis.conf"
+}
+
+# 设置主节点到从节点的输出缓冲区大小
+write_replication_backlog_config() {
+  #根据机器内存梯度确定大小
+  ## mem(G) client-output-buffer-limit(MB)
+  ##  <2                  256
+  ##  [2,4]               384
+  ##  [4,8]               512
+  ##  [8,16]              768
+  ##  >16                 1024
+  max_2g=2048
+  max_4g=4096
+  max_8g=8192
+  max_16g=16384
+
+  # 从podinfo中取到配置的limits.memory
+  machine_mem_byte=$(sed -n '1p' "${POD_INFO_MEMORY_LIMIT}" | sed 's/[ \t]*//g')
+  # 换算成mb
+  machine_mem=$(("$machine_mem_byte"/1024/1024))
+
+  if [ "$machine_mem" -lt $max_2g ]; then
+    buffer_val=256
+  elif [ "$machine_mem" -lt $max_4g ]; then
+    buffer_val=384
+  elif [ "$machine_mem" -lt $max_8g ]; then
+    buffer_val=512
+  elif [ "$machine_mem" -lt $max_16g ]; then
+    buffer_val=768
+  else
+    buffer_val=1024
+  fi
+  echo "---I--- machine memory:$machine_mem client-output-buffer-limit:$buffer_val"
+  # client-output-buffer-limit <class> <hard limit> <soft limit> <soft seconds>
+  buffer_str="client-output-buffer-limit replica ${buffer_val}mb ${buffer_val}mb 0"
+  n=$(grep -E -wc "^client-output-buffer-limit replica" "${DATA_DIR}/redis.conf")
+  if [ "$n" -eq 0 ]; then
+    # $ 代表的是最后一行，而 a 的动作是新增，因此该文件最后新增 client-output-buffer-limit replica ${buffer_val}mb ${buffer_val}mb 0
+    sed -i '$a '"$buffer_str"'' "${DATA_DIR}/redis.conf"
+  else
+    sed -i "s/^client-output-buffer-limit replica.*$/$buffer_str/g" "${DATA_DIR}/redis.conf"
+  fi
+  num=$(grep -wc "$buffer_str" "${DATA_DIR}/redis.conf")
+  if [ "$num" -eq 0 ]; then
+    echo "---E--- modify $buffer_str failed !"
+    quit 5
+  fi
+  echo " ---I--- modify $buffer_str successful !"
 }
 
 redis_standalone_setup() {
-    echo "Setting up redis in standalone mode"
+  echo "Setting up redis in standalone mode"
 }
 
 redis_cluster_setup() {
-      echo "Setting up redis in cluster mode"
+  echo "Setting up redis in cluster mode"
 
-      # 如果redis.conf配置文件不存在，则创建初始化配置
-      if [ ! -e "${DATA_DIR}/redis.conf" ]; then
-        echo "${DATA_DIR}/redis.conf" "is not exists, current cluster first startup, create ${DATA_DIR}/redis.conf"
+  # 如果redis.conf配置文件不存在，则创建初始化配置
+  if [ ! -e "${DATA_DIR}/redis.conf" ]; then
+    echo "${DATA_DIR}/redis.conf" "is not exists, current cluster first startup, create ${DATA_DIR}/redis.conf"
 
-        # 1、写入扩展配置
-        if [ -f "${EXTERNAL_CONFIG_FILE}" ]; then
-          external_config
-        fi
+    # 1、写入扩展配置
+    if [ -f "${EXTERNAL_CONFIG_FILE}" ]; then
+      external_config
+    fi
 
-        # 2、写入集群配置
-        write_cluster_config
+    # 2、写入基本配置
+    write_dir_config
 
-        # 3、创建acl文件
-        create_users_acl
-      fi
+    # 3、写入集群配置
+    write_cluster_config
 
-      # 5、设置default用户密码
-      set_redis_password
+    # 4、创建acl文件
+    write_acl_config
 
-      # 4、写入最新ip到node.conf文件
-      write_pod_ip
+    # 5、写入持久化配置
+    write_persistence_config
 
-      # todo 写入持久化配置
+    # 6、写入日志相关配置
+    write_log_config
+  fi
+
+  # 7、设置default用户密码
+  write_redis_password
+
+  # 8、写入最新ip到node.conf文件
+  write_pod_ip
+
+  # 9、写入maxmemory
+  # write_maxmemory_config
+
+  # 10、写入设置主节点到从节点的输出缓冲区大小
+  # write_replication_backlog_config
 }
 
 main_function() {
-    # cluster模式启动
-    if [ "${SETUP_MODE}" = "cluster" ]; then
-      redis_cluster_setup
-    else
-      redis_standalone_setup
-    fi
+  # cluster模式启动
+  if [ "${SETUP_MODE}" = "cluster" ]; then
+    redis_cluster_setup
+  else
+    redis_standalone_setup
+  fi
 }
-
 
 main_function
 # `$@`前面有个exec，会用`redis-server`命令启动的进程取代当前的`docker-entrypoint.sh`进程，所以，最终redis进程的PID等于1，`而docker-entrypoint.sh`这个脚本的进程已经被替代，因此就结束掉了；

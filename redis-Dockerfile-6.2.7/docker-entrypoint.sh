@@ -60,6 +60,7 @@ external_config() {
 }
 
 write_cluster_config() {
+  echo "write_cluster_config..."
   {
     echo cluster-enabled yes
     echo cluster-node-timeout 15000
@@ -70,6 +71,7 @@ write_cluster_config() {
 }
 
 write_pod_ip() {
+  echo "write_pod_ip..."
   if [ -f "${DATA_DIR}/nodes.conf" ]; then
     # 如果没有指定POD_IP环境变量，则使用 hostname -i
     if [ -z "${POD_IP}" ]; then
@@ -81,6 +83,7 @@ write_pod_ip() {
 }
 
 write_acl_config() {
+  echo "write_acl_config..."
   {
     echo aclfile "${DATA_DIR}/users.acl"
     echo acl-pubsub-default resetchannels
@@ -92,6 +95,7 @@ write_acl_config() {
 # 重要提示：从Redis 6开始，"requirepass "只是新ACL系统之上的一个兼容层。该选项的作用只是为default用户设置密码。
 # 客户端仍将像往常一样使用AUTH <password>进行认证，或者更明确地使用AUTH default <password>，如果他们遵循新的协议：两者都可以工作。requirepass 与 aclfile 选项和 ACL LOAD 命令不兼容，这些将导致 requirepass 被忽略
 write_redis_password() {
+  echo "write_redis_password..."
   if [ -z "${REDIS_PASSWORD}" ]; then
     echo "Redis is running without password which is not recommended"
   else
@@ -106,6 +110,7 @@ write_redis_password() {
 
 # write_persistence_config 写入持久化配置
 write_persistence_config() {
+  echo "write_persistence_config..."
   {
     echo save ""
     echo appendonly no
@@ -115,6 +120,7 @@ write_persistence_config() {
 
 # write_log_config 写入日志相关配置
 write_log_config() {
+  echo "write_log_config..."
   {
     echo loglevel notice
     echo logfile "${DATA_DIR}/redis.log"
@@ -123,23 +129,26 @@ write_log_config() {
 
 # write_maxmemory_config 写入maxmemory配置
 write_maxmemory_config() {
-    # 设置maxmemory
-    pod_memory_limit=$(sed -n '1p' "${POD_INFO_MEMORY_LIMIT}" | sed 's/[ \t]*//g')
-    my_maxmemory=$(echo "$pod_memory_limit $MEMORY_RATIO" | awk '{printf("%.0f",$1*$2)}')
-    echo "---I--- Config maxmemory is $my_maxmemory byte!"
-    sed -i '/maxmemory/d' "${DATA_DIR}"/redis.conf
-    echo "maxmemory ${my_maxmemory}" >>"${DATA_DIR}/redis.conf"
+  echo "write_maxmemory_config..."
+  # 设置maxmemory
+  pod_memory_limit=$(sed -n '1p' "${POD_INFO_MEMORY_LIMIT}" | sed 's/[ \t]*//g')
+  my_maxmemory=$(echo "$pod_memory_limit $MEMORY_RATIO" | awk '{printf("%.0f",$1*$2)}')
+  echo "---I--- Config maxmemory is $my_maxmemory byte!"
+  sed -i '/maxmemory/d' "${DATA_DIR}"/redis.conf
+  echo "maxmemory ${my_maxmemory}" >>"${DATA_DIR}/redis.conf"
 }
 
 # write_dir_config 写入dir
 write_dir_config() {
-    {
-      echo dir "/data"
-    } >>"${DATA_DIR}/redis.conf"
+  echo "write_dir_config..."
+  {
+    echo dir "/data"
+  } >>"${DATA_DIR}/redis.conf"
 }
 
 # 设置主节点到从节点的输出缓冲区大小
 write_replication_backlog_config() {
+  echo "write_replication_backlog_config..."
   #根据机器内存梯度确定大小
   ## mem(G) client-output-buffer-limit(MB)
   ##  <2                  256
@@ -155,7 +164,7 @@ write_replication_backlog_config() {
   # 从podinfo中取到配置的limits.memory
   machine_mem_byte=$(sed -n '1p' "${POD_INFO_MEMORY_LIMIT}" | sed 's/[ \t]*//g')
   # 换算成mb
-  machine_mem=$(("$machine_mem_byte"/1024/1024))
+  machine_mem=$(("$machine_mem_byte" / 1024 / 1024))
 
   if [ "$machine_mem" -lt $max_2g ]; then
     buffer_val=256

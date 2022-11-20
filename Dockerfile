@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} GO111MODULE=on go build -a -o manage
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot-${ARCH}
-LABEL maintainer="The Opstree Opensource <opensource@opstree.com>"
+LABEL maintainer="Lei Jianzhong <18761665514@163.com>"
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532

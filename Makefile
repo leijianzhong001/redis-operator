@@ -15,7 +15,7 @@ endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 # Image URL to use all building/pushing image targets
-IMG ?= quay.io/opstree/redis-operator:v$(VERSION)
+IMG ?= registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis-operator:$(VERSION)
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
@@ -77,6 +77,7 @@ vet:
 # Generate code
 # paths="./..." 代表路径和go-style路径模式，作为包根使用。
 # 如果没有手动指定 fallback 规则，默认的 per-generator 将被使用，生成的 YAML 将放到 config/<generator>相应目录，代码所在的位置不变
+# 下面的 controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..." 命令用于生成生成zz_xxx.deepcopy.go文件
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 

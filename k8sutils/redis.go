@@ -12,7 +12,7 @@ import (
 	redisv1beta1 "redis-operator/api/v1beta1"
 
 	"github.com/go-logr/logr"
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -108,7 +108,9 @@ func ExecuteRedisClusterCommand(cr *redisv1beta1.RedisCluster) {
 		if err != nil {
 			logger.Error(err, "Error in getting redis password")
 		}
-		cmd = append(cmd, "-a")
+		cmd = append(cmd, "--user")
+		cmd = append(cmd, "default")
+		cmd = append(cmd, "--pass")
 		cmd = append(cmd, pass)
 	}
 	cmd = append(cmd, getRedisTLSArgs(cr.Spec.TLS, cr.ObjectMeta.Name+"-leader-0")...)
@@ -117,7 +119,7 @@ func ExecuteRedisClusterCommand(cr *redisv1beta1.RedisCluster) {
 }
 
 func getRedisTLSArgs(tlsConfig *redisv1beta1.TLSConfig, clientHost string) []string {
-	cmd := []string{}
+	var cmd []string
 	if tlsConfig != nil {
 		cmd = append(cmd, "--tls")
 		cmd = append(cmd, "--cacert")
@@ -146,7 +148,9 @@ func createRedisReplicationCommand(cr *redisv1beta1.RedisCluster, leaderPod Redi
 		if err != nil {
 			logger.Error(err, "Error in getting redis password")
 		}
-		cmd = append(cmd, "-a")
+		cmd = append(cmd, "--user")
+		cmd = append(cmd, "default")
+		cmd = append(cmd, "--pass")
 		cmd = append(cmd, pass)
 	}
 	cmd = append(cmd, getRedisTLSArgs(cr.Spec.TLS, leaderPod.PodName)...)
@@ -181,25 +185,21 @@ func ExecuteRedisReplicationCommand(cr *redisv1beta1.RedisCluster) {
 	}
 }
 
+var ctx = context.Background()
+
 // checkRedisCluster will check the redis cluster have sufficient nodes or not
 func checkRedisCluster(cr *redisv1beta1.RedisCluster) [][]string {
 	var client *redis.Client
 	logger := generateRedisManagerLogger(cr.Namespace, cr.ObjectMeta.Name)
 	client = configureRedisClient(cr, cr.ObjectMeta.Name+"-leader-0")
 	defer client.Close()
-	cmd := redis.NewStringCmd("cluster", "nodes")
-	err := client.Process(cmd)
-	if err != nil {
-		logger.Error(err, "Redis command failed with this error")
-	}
-
-	output, err := cmd.Result()
+	output, err := client.Do(ctx, "cluster", "nodes").Result()
 	if err != nil {
 		logger.Error(err, "Redis command failed with this error")
 	}
 	logger.Info("Redis cluster nodes are listed", "Output", output)
 
-	csvOutput := csv.NewReader(strings.NewReader(output))
+	csvOutput := csv.NewReader(strings.NewReader(fmt.Sprintf("%v", output)))
 	csvOutput.Comma = ' '
 	csvOutput.FieldsPerRecord = -1
 	csvOutputRecords, err := csvOutput.ReadAll()
@@ -234,23 +234,18 @@ func executeFailoverCommand(cr *redisv1beta1.RedisCluster, role string) error {
 		logger.Info("Executing redis failover operations", "Redis Node", podName+strconv.Itoa(podCount))
 		client := configureRedisClient(cr, podName+strconv.Itoa(podCount))
 		defer client.Close()
-		cmd := redis.NewStringCmd("cluster", "reset")
-		err := client.Process(cmd)
+
+		_, err := client.Do(ctx, "cluster", "reset").Result()
 		if err != nil {
+			// 当前节点如果reset失败，可能是因为当前节点上还有数据，所以先flushall
 			logger.Error(err, "Redis command failed with this error")
-			flushcommand := redis.NewStringCmd("flushall")
-			err := client.Process(flushcommand)
+			_, err = client.FlushAll(ctx).Result()
 			if err != nil {
 				logger.Error(err, "Redis flush command failed with this error")
 				return err
 			}
 		}
-		err = client.Process(cmd)
-		if err != nil {
-			logger.Error(err, "Redis command failed with this error")
-			return err
-		}
-		output, err := cmd.Result()
+		output, err := client.Do(ctx, "cluster", "reset").Result()
 		if err != nil {
 			logger.Error(err, "Redis command failed with this error")
 			return err
@@ -320,6 +315,7 @@ func configureRedisClient(cr *redisv1beta1.RedisCluster, podName string) *redis.
 		}
 		client = redis.NewClient(&redis.Options{
 			Addr:      getRedisServerIP(redisInfo) + ":6379",
+			Username:  "default",
 			Password:  pass,
 			DB:        0,
 			TLSConfig: getRedisTLSConfig(cr, redisInfo),

@@ -45,6 +45,7 @@ rules:
   - configmaps
   - persistentvolumes
   - persistentvolumeclaims
+  - events
   verbs:
   - create
   - delete

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # -e 若指令传回值不等于0，则立即退出shell
 set -ea
@@ -105,6 +105,9 @@ write_redis_password() {
       echo masterauth "${REDIS_PASSWORD}"
       echo requirepass "${REDIS_PASSWORD}"
     } >>"${DATA_DIR}/redis.conf"
+    # 有密码的情况下，写入default用户的acl规则
+    PASS_SHA256=$(echo -n "${REDIS_PASSWORD}" | sha256sum | tr -d '  -')
+    echo "user default on #${PASS_SHA256} ~* &* +@all" >> "${DATA_DIR}/users.acl"
   fi
 }
 
@@ -112,7 +115,7 @@ write_redis_password() {
 write_persistence_config() {
   echo "write_persistence_config..."
   {
-    echo save ""
+    echo save '""'
     echo appendonly no
     echo appendfilename "appendonly.aof"
   } >>"${DATA_DIR}/redis.conf"

@@ -484,6 +484,26 @@ func getEnvironmentVariables(role string, enabledMetric bool, enabledPassword *b
 	if extraEnv != nil {
 		envVars = append(envVars, *extraEnv...)
 	}
+
+	// todo 将pod的cpu和memory挂载为环境变量，让启动脚本可以获取到
+	envVars = append(envVars, corev1.EnvVar{
+		Name: "CONTAINER_LIMIT_CPU",
+		ValueFrom: &corev1.EnvVarSource{
+			ResourceFieldRef: &corev1.ResourceFieldSelector{
+				Resource: "limits.cpu",
+			},
+		},
+	})
+
+	envVars = append(envVars, corev1.EnvVar{
+		Name: "CONTAINER_LIMIT_MEMORY",
+		ValueFrom: &corev1.EnvVarSource{
+			ResourceFieldRef: &corev1.ResourceFieldSelector{
+				Resource: "limits.memory",
+			},
+		},
+	})
+
 	sort.SliceStable(envVars, func(i, j int) bool {
 		return envVars[i].Name < envVars[j].Name
 	})

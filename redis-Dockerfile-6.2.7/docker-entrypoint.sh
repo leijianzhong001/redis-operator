@@ -105,6 +105,7 @@ write_redis_password() {
       echo requirepass "${REDIS_PASSWORD}"
     } >>"${DATA_DIR}/redis.conf"
     # 有密码的情况下，写入default用户的acl规则
+    sed -i '/user default on/d' "${DATA_DIR}/redis.conf"
     PASS_SHA256=$(echo -n "${REDIS_PASSWORD}" | sha256sum | tr -d '  -')
     echo "user default on #${PASS_SHA256} ~* &* +@all" >> "${DATA_DIR}/users.acl"
   fi

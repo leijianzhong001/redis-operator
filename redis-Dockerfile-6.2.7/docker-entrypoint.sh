@@ -45,7 +45,6 @@ fi
 
 EXTERNAL_CONFIG_FILE=${EXTERNAL_CONFIG_FILE:-"/etc/redis/external.conf.d/redis-external.conf"}
 DATA_DIR=${DATA_DIR:-"/data"}
-POD_INFO_MEMORY_LIMIT="/etc/pod-info/memory_limit"
 
 #输出一下指定的用户信息
 current_user="$(id)"
@@ -138,7 +137,7 @@ write_maxmemory_config() {
   my_maxmemory=$(echo "$pod_memory_limit $MEMORY_RATIO" | awk '{printf("%.0f",$1*$2)}')
   echo "---I--- Config maxmemory is $my_maxmemory byte!"
   sed -i '/maxmemory/d' "${DATA_DIR}"/redis.conf
-  echo "maxmemory ${my_maxmemory}" >>"${DATA_DIR}/redis.conf"
+  echo "maxmemory ${my_maxmemory}" >> "${DATA_DIR}/redis.conf"
 }
 
 # write_dir_config 写入dir
@@ -237,10 +236,10 @@ redis_cluster_setup() {
   write_pod_ip
 
   # 9、写入maxmemory
-  # write_maxmemory_config
+  write_maxmemory_config
 
   # 10、写入设置主节点到从节点的输出缓冲区大小
-  # write_replication_backlog_config
+  write_replication_backlog_config
 }
 
 main_function() {

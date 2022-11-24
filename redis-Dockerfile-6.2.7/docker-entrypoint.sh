@@ -181,7 +181,7 @@ write_replication_backlog_config() {
   # client-output-buffer-limit <class> <hard limit> <soft limit> <soft seconds>
   buffer_str="client-output-buffer-limit replica ${buffer_val}mb ${buffer_val}mb 0"
   num1=$(grep -E -wc "^client-output-buffer-limit replica" "${DATA_DIR}/redis.conf")
-  if [ "${num1}" == "0" ]; then
+  if [ "${num1}" -eq 0 ]; then
     # $ 代表的是最后一行，而 a 的动作是新增，因此该文件最后新增 client-output-buffer-limit replica ${buffer_val}mb ${buffer_val}mb 0
     sed -i '$a '"$buffer_str"'' "${DATA_DIR}/redis.conf"
   else
@@ -190,7 +190,7 @@ write_replication_backlog_config() {
   num=$(grep -wc "$buffer_str" "${DATA_DIR}/redis.conf")
   if [ "$num" -eq 0 ]; then
     echo "---E--- modify $buffer_str failed !"
-    quit 5
+    exit 5
   fi
   echo " ---I--- modify $buffer_str successful !"
 }

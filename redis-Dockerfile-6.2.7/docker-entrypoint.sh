@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -e 若指令传回值不等于0，则立即退出shell
-set -ea
+set -euax
 
 # first arg is `-f` or `--some-option` or first arg is `something.conf`
 # ${1#-} 表示如果变量以-开头，就从$1变量中删除-， "${1#-}" != "$1" 的意思就是如果$1参数是以-开头的，那么条件成立

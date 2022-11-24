@@ -504,6 +504,8 @@ func getEnvironmentVariables(role string, enabledMetric bool, enabledPassword *b
 		},
 	})
 
+	envVars = append(envVars, corev1.EnvVar{Name: "MEMORY_RATIO", Value: "0.6"})
+
 	sort.SliceStable(envVars, func(i, j int) bool {
 		return envVars[i].Name < envVars[j].Name
 	})

@@ -134,7 +134,7 @@ write_log_config() {
 write_maxmemory_config() {
   echo "write_maxmemory_config..."
   # 设置maxmemory
-  pod_memory_limit=$(sed -n '1p' "${POD_INFO_MEMORY_LIMIT}" | sed 's/[ \t]*//g')
+  pod_memory_limit=$(sed -n '1p' "${CONTAINER_LIMIT_MEMORY}" | sed 's/[ \t]*//g')
   my_maxmemory=$(echo "$pod_memory_limit $MEMORY_RATIO" | awk '{printf("%.0f",$1*$2)}')
   echo "---I--- Config maxmemory is $my_maxmemory byte!"
   sed -i '/maxmemory/d' "${DATA_DIR}"/redis.conf
@@ -165,7 +165,7 @@ write_replication_backlog_config() {
   max_16g=16384
 
   # 从podinfo中取到配置的limits.memory
-  machine_mem_byte=$(sed -n '1p' "${POD_INFO_MEMORY_LIMIT}" | sed 's/[ \t]*//g')
+  machine_mem_byte=$(sed -n '1p' "${CONTAINER_LIMIT_MEMORY}" | sed 's/[ \t]*//g')
   # 换算成mb
   machine_mem=$(("$machine_mem_byte" / 1024 / 1024))
 

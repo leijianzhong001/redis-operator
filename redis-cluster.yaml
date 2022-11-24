@@ -13,7 +13,7 @@ spec:
   persistenceEnabled: true
   kubernetesConfig:
     image: registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis:6.2.7
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     resources:
       requests:
         cpu: 100m

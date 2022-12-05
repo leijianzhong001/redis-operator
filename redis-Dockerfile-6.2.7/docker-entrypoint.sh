@@ -1,7 +1,11 @@
 #!/bin/bash
 
 # -e 若指令传回值不等于0，则立即退出shell
-set -euax
+# https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html gnu描述文档中对于set -e参数又如下描述
+#   如果【除了子shell】之外的复合命令因为在-e被忽略时有命令失败而返回非零状态，shell不会退出。如果设置了ERR的trap，在shell退出前会被执行。
+# 也就是说，如果是子shell, 即使作为if条件的判定部分返回非0，也会造成脚本异常退出。
+# 而我们的脚本恰恰是作为一个子shell运行的，所以不能设置-e参数
+set -ua
 
 # first arg is `-f` or `--some-option` or first arg is `something.conf`
 # ${1#-} 表示如果变量以-开头，就从$1变量中删除-， "${1#-}" != "$1" 的意思就是如果$1参数是以-开头的，那么条件成立

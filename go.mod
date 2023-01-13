@@ -6,6 +6,7 @@ require (
 	github.com/banzaicloud/k8s-objectmatcher v1.7.0
 	github.com/go-logr/logr v1.2.2
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/lucasepe/codename v0.2.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.18.1
 	k8s.io/api v0.23.0

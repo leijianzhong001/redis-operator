@@ -13,7 +13,7 @@ spec:
   persistenceEnabled: true
   kubernetesConfig:
     image: registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis:6.2.7
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     resources:
       requests:
         cpu: 100m
@@ -40,7 +40,7 @@ spec:
         value: "true"
   sidecars:
     - name: "redis-agent"
-      image: "registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis_agent:1.0.1"
+      image: "registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis-agent:v1.0.2"
       imagePullPolicy: IfNotPresent
       resources:
         requests:
@@ -78,39 +78,6 @@ spec:
                   values:
                     - redis-cluster-alpha-follower
             topologyKey: "kubernetes.io/hostname"
-  storage:
-    volumeClaimTemplate:
-      spec:
-        storageClassName: ljz-ganesha-nfs
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 1Gi
----
-apiVersion: redis.redis.opstreelabs.in/v1beta1
-kind: RedisCluster
-metadata:
-  name: redis-cluster
-  namespace: default
-spec:
-  clusterSize: 3
-  clusterVersion: v6
-  securityContext:
-    runAsUser: 999
-    fsGroup: 999
-  persistenceEnabled: true
-  kubernetesConfig:
-    image: registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis:6.2.7
-    resources:
-      requests:
-        cpu: 101m
-        memory: 128Mi
-      limits:
-        cpu: 101m
-        memory: 128Mi
-  redisExporter:
-    enabled: false
-    image: quay.io/opstree/redis-exporter:v1.44.0
   storage:
     volumeClaimTemplate:
       spec:

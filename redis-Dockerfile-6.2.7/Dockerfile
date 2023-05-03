@@ -124,5 +124,5 @@ RUN chmod +x /usr/bin/healthcheck.sh
 ENTRYPOINT ["docker-entrypoint.sh"]
 
 EXPOSE 6379
-# 启动redis-server， 这里的redis-server会作为参数传递给上面的 ENTRYPOINT ["docker-entrypoint.sh"]
+# 启动redis-server， 这里的/data/redis.conf会作为参数传递给上面的 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["/data/redis.conf"]

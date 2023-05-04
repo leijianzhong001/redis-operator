@@ -77,9 +77,7 @@ write_pod_ip() {
   echo "write_pod_ip..."
   if [ -f "${DATA_DIR}/nodes.conf" ]; then
     # 如果没有指定POD_IP环境变量，则使用 hostname -i
-    if test "${POD_IP}"; then
-      POD_IP=$(hostname -i)
-    fi
+    POD_IP=$(hostname -i)
     echo "${DATA_DIR}/nodes.conf" "is exists, update myself pod ip to ${POD_IP}"
     sed -i -e "/myself/ s/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/${POD_IP}/" "${DATA_DIR}/nodes.conf"
   fi

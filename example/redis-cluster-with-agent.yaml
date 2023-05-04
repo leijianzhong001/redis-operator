@@ -13,7 +13,7 @@ spec:
   persistenceEnabled: true
   kubernetesConfig:
     image: registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis:6.2.7
-    imagePullPolicy: IfNotPresent
+    imagePullPolicy: Always
     resources:
       requests:
         cpu: 100m
@@ -41,7 +41,7 @@ spec:
   sidecars:
     - name: "redis-agent"
       image: "registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis-agent:v1.0.2"
-      imagePullPolicy: IfNotPresent
+      imagePullPolicy: Always
       resources:
         requests:
           cpu: 100m

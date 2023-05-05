@@ -42,9 +42,11 @@ type RedisClusterReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	reqLogger := r.Log.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
+	// 1.6611548692645001e+09  INFO    controllers.Redis	Reconciling opstree redis Cluster controller    {"Request.Namespace": "default", "Request.Name": "create"}
 	reqLogger.Info("Reconciling opstree redis Cluster controller")
 	instance := &redisv1beta1.RedisCluster{}
 
+	// 从本地缓存中读取 这里的Get方法底层实际调用的是delegatingReader的Get方法，delegatingReader的CacheReader属性的实际类型是 informerCache，其Get方法就是informerCache.Get
 	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -58,18 +60,22 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
+	// 获得副本数量的指针
 	leaderReplicas := instance.Spec.GetReplicaCounts("leader")
 	followerReplicas := instance.Spec.GetReplicaCounts("follower")
 	totalReplicas := leaderReplicas + followerReplicas
 
+	// 如果当前实例被标记了删除，那么删除该实例关联的service和pvc
 	if err := k8sutils.HandleRedisClusterFinalizer(instance, r.Client); err != nil {
 		return ctrl.Result{RequeueAfter: time.Second * 60}, err
 	}
 
+	// 如果没有的话，给实例添加一个 Finalizer
 	if err := k8sutils.AddRedisClusterFinalizer(instance, r.Client); err != nil {
 		return ctrl.Result{RequeueAfter: time.Second * 60}, err
 	}
 
+	// 创建所有的主节点
 	err = k8sutils.CreateRedisLeader(instance)
 	if err != nil {
 		return ctrl.Result{RequeueAfter: time.Second * 60}, err
@@ -122,10 +128,15 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		reqLogger.Info("Redis leader and follower nodes are not ready yet", "Ready.Replicas", strconv.Itoa(int(redisLeaderInfo.Status.ReadyReplicas)), "Expected.Replicas", leaderReplicas)
 		return ctrl.Result{RequeueAfter: time.Second * 120}, nil
 	}
+
+	// 前面已经确保了pod数量是够的，剩下的就是实际的redis cluster集群的节点数量
 	reqLogger.Info("Creating redis cluster by executing cluster creation commands", "Leaders.Ready", strconv.Itoa(int(redisLeaderInfo.Status.ReadyReplicas)), "Followers.Ready", strconv.Itoa(int(redisFollowerInfo.Status.ReadyReplicas)))
 	if k8sutils.CheckRedisNodeCount(instance, "") != totalReplicas {
+		// todo 这个地方通过cluster nodes获取节点数量，但只检查节点数量，不检查节点状态，失败的节点也算
 		leaderCount := k8sutils.CheckRedisNodeCount(instance, "leader")
 		if leaderCount != leaderReplicas {
+			// 主节点数量不够，有可能是第一次集群创建，或者是有redis中的node莫名的离开了集群（只能手动断开，因为网络分区等不会导致cluster nodes的输出减少）
+			// 接着排除手动断开的话，这个分支99%的可能是集群第一次创建的时候
 			reqLogger.Info("Not all leader are part of the cluster...", "Leaders.Count", leaderCount, "Instance.Size", leaderReplicas)
 			k8sutils.ExecuteRedisClusterCommand(instance)
 		} else {
@@ -138,13 +149,16 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	} else {
 		reqLogger.Info("Redis leader count is desired")
+		// 检查是否有flag是fail或者连接状态是disconnected
 		if k8sutils.CheckRedisClusterState(instance) >= int(totalReplicas)-1 {
 			reqLogger.Info("Redis leader is not desired, executing failover operation")
+			//  这个地方判断至少是整个集群中所有节点状态都不对的情况下，才把集群铲掉重建
 			err = k8sutils.ExecuteFailoverOperation(instance)
 			if err != nil {
 				return ctrl.Result{RequeueAfter: time.Second * 10}, err
 			}
 		}
+		// 否则的话，等待集群调谐 2分钟一次
 		return ctrl.Result{RequeueAfter: time.Second * 120}, nil
 	}
 	reqLogger.Info("Will reconcile redis cluster operator in again 10 seconds")

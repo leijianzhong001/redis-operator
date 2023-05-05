@@ -60,7 +60,9 @@ type containerParameters struct {
 // CreateOrUpdateStateFul method will create or update Redis service
 func CreateOrUpdateStateFul(namespace string, stsMeta metav1.ObjectMeta, params statefulSetParameters, ownerDef metav1.OwnerReference, containerParams containerParameters, sidecars *[]redisv1beta1.Sidecar) error {
 	logger := statefulSetLogger(namespace, stsMeta.Name)
+	// 从k8s集群中获取已经存在的同样命名空间，同样名称的sts, 如果未获取到，则为空
 	storedStateful, err := GetStatefulSet(namespace, stsMeta.Name)
+	// 使用用户提供的cr文件内容生成一个sts对象，这个对象将和上面的已存在对象进行比较，如果不一样，则更新
 	statefulSetDef := generateStatefulSetsDef(stsMeta, params, ownerDef, containerParams, getSidecars(sidecars))
 	if err != nil {
 		if err := patch.DefaultAnnotator.SetLastAppliedAnnotation(statefulSetDef); err != nil {
@@ -306,6 +308,8 @@ func generateContainerDef(name string, containerParams containerParameters, enab
 			Name:            sidecar.Name,
 			Image:           sidecar.Image,
 			ImagePullPolicy: sidecar.ImagePullPolicy,
+			// 对于sidecar容器，如果也开启持久化的话，默认也挂在/data目录，否额redis-agent无法访问到/data/dump.rdb
+			VolumeMounts: getVolumeMountForSidecar(sidecar.Name, containerParams.PersistenceEnabled),
 		}
 		if sidecar.Resources != nil {
 			container.Resources = *sidecar.Resources
@@ -406,6 +410,19 @@ func getVolumeMount(name string, persistenceEnabled *bool, externalConfig *strin
 		})
 	}
 
+	return VolumeMounts
+}
+
+// getVolumeMount gives information about persistence mount
+func getVolumeMountForSidecar(name string, persistenceEnabled *bool) []corev1.VolumeMount {
+	var VolumeMounts []corev1.VolumeMount
+
+	if persistenceEnabled != nil && *persistenceEnabled {
+		VolumeMounts = append(VolumeMounts, corev1.VolumeMount{
+			Name:      name,
+			MountPath: "/data",
+		})
+	}
 	return VolumeMounts
 }
 

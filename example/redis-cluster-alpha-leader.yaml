@@ -1,0 +1,211 @@
+# 这个yaml截取自redis cluster创建完成后生成的sts的资源描述文件， 主要是为了方便对比解析redis-operator的相关生成逻辑
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    redis.opstreelabs.in: 'true'
+    redis.opstreelabs.instance: redis-cluster-alpha
+  labels:
+    app: redis-cluster-alpha-leader
+    redis_setup_type: cluster
+    role: leader
+  name: redis-cluster-alpha-leader
+  namespace: default
+  ownerReferences:
+    - apiVersion: redis.redis.opstreelabs.in/v1beta1
+      controller: true
+      kind: RedisCluster
+      name: redis-cluster-alpha
+      uid: b5697db0-c360-4586-b79a-81b018282acd
+  resourceVersion: '64650472'
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: redis-cluster-alpha-leader
+      redis_setup_type: cluster
+      role: leader
+  serviceName: redis-cluster-alpha-leader-headless
+  template:
+    metadata:
+      annotations:
+        redis.opstreelabs.in: 'true'
+        redis.opstreelabs.instance: redis-cluster-alpha
+      creationTimestamp: null
+      labels:
+        app: redis-cluster-alpha-leader
+        redis_setup_type: cluster
+        role: leader
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - redis-cluster-alpha-leader
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - env:
+            - name: CONTAINER_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  divisor: '0'
+                  resource: limits.cpu
+            - name: CONTAINER_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  divisor: '0'
+                  resource: limits.memory
+            - name: MEMORY_RATIO
+              value: '0.6'
+            - name: PERSISTENCE_ENABLED
+              value: 'true'
+            - name: REDIS_ADDR
+              value: 'redis://localhost:6379'
+            - name: REDIS_EXPORTER_INCL_SYSTEM_METRICS
+              value: 'true'
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: redis-secret
+            - name: SERVER_MODE
+              value: cluster
+            - name: SETUP_MODE
+              value: cluster
+          image: 'registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis:6.2.7'
+          imagePullPolicy: Always
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - /usr/bin/healthcheck.sh
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: redis-cluster-alpha-leader
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - /usr/bin/healthcheck.sh
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: '2'
+              memory: 2Gi
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data
+              name: redis-cluster-alpha-leader
+            - mountPath: /etc/redis/external.conf.d
+              name: external-config
+        - env:
+            - name: CONTAINER_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  divisor: '0'
+                  resource: limits.cpu
+            - name: CONTAINER_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  divisor: '0'
+                  resource: limits.memory
+            - name: MEMORY_RATIO
+              value: '0.6'
+            - name: PERSISTENCE_ENABLED
+              value: 'true'
+            - name: REDIS_ADDR
+              value: 'redis://localhost:6379'
+            - name: REDIS_EXPORTER_INCL_SYSTEM_METRICS
+              value: 'true'
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: redis-secret
+            - name: SERVER_MODE
+              value: cluster
+            - name: SETUP_MODE
+              value: cluster
+          image: 'quay.io/opstree/redis-exporter:1.0'
+          imagePullPolicy: IfNotPresent
+          name: redis-exporter
+          resources:
+            limits:
+              cpu: '2'
+              memory: 2Gi
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        - env:
+            - name: VAR_NAME
+              value: value1
+          image: 'registry.cn-hangzhou.aliyuncs.com/leijianzhong/redis-agent:v1.0.2'
+          imagePullPolicy: Always
+          name: redis-agent
+          resources:
+            limits:
+              cpu: '2'
+              memory: 2Gi
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: redis-external-config
+          name: external-config
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        annotations:
+          redis.opstreelabs.in: 'true'
+          redis.opstreelabs.instance: redis-cluster-alpha
+        creationTimestamp: null
+        labels:
+          app: redis-cluster-alpha-leader
+          redis_setup_type: cluster
+          role: leader
+        name: redis-cluster-alpha-leader
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: ljz-ganesha-nfs
+        volumeMode: Filesystem
+      status:
+        phase: Pending

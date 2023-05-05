@@ -52,6 +52,7 @@ spec:
       env:
         - name: VAR_NAME
           value: "value1"
+          
   redisLeader:
     redisConfig:
       additionalRedisConfig: redis-external-config

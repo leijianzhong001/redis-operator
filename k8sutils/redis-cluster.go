@@ -148,8 +148,11 @@ func (service RedisClusterSTS) getReplicaCount(cr *redisv1beta1.RedisCluster) in
 func (service RedisClusterSTS) CreateRedisClusterSetup(cr *redisv1beta1.RedisCluster) error {
 	stateFulName := cr.ObjectMeta.Name + "-" + service.RedisStateFulType
 	logger := statefulSetLogger(cr.Namespace, stateFulName)
+	// 把默认的和用户添加的所有label都整合起来
 	labels := getRedisLabels(stateFulName, "cluster", service.RedisStateFulType, cr.ObjectMeta.Labels)
+	// 生成注解
 	annotations := generateStatefulSetsAnots(cr.ObjectMeta)
+	// 使用上面的信息构造对象Meta数据
 	objectMetaInfo := generateObjectMetaInformation(stateFulName, cr.Namespace, labels, annotations)
 	err := CreateOrUpdateStateFul(
 		cr.Namespace,

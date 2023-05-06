@@ -309,7 +309,8 @@ func generateContainerDef(name string, containerParams containerParameters, enab
 			Image:           sidecar.Image,
 			ImagePullPolicy: sidecar.ImagePullPolicy,
 			// 对于sidecar容器，如果也开启持久化的话，默认也挂在/data目录，否额redis-agent无法访问到/data/dump.rdb
-			VolumeMounts: getVolumeMountForSidecar(sidecar.Name, containerParams.PersistenceEnabled),
+			// 另外这个挂载盘的名称必须是name，因为这里构建的sts的 volumeClaimTemplates 中的挂载模板的名称为 name
+			VolumeMounts: getVolumeMountForSidecar(name, containerParams.PersistenceEnabled),
 		}
 		if sidecar.Resources != nil {
 			container.Resources = *sidecar.Resources

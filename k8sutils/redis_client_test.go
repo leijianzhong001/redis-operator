@@ -524,6 +524,62 @@ func TestMemoryEvaluationString(t *testing.T) {
 	// (48 + 16 + 74) * 3000000 + 4194304 * 8 = 414000000 + 33554432 = 447554432 = 426MB
 }
 
+// 总内存消耗 = (`32` + `16` + `key_SDS`大小＋`val_SDS`大小) * key个数＋bucket个数 * 8
+func TestMemoryEvaluationStringForCluster(t *testing.T) {
+	client := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:        []string{"10.243.66.12:30001", "10.243.66.12:30002", "10.243.66.12:30003"},
+		MaxRedirects: 5,
+	})
+
+	var all int64 = 0
+	var keyCount int64 = 0
+
+	rng, _ := codename.DefaultRNG()
+	kV := make(map[string]string, 1000)
+	for i := 1; i <= 3000000; i++ {
+		key := "{snrs1}:" + fmt.Sprintf("%d", i)
+		value := codename.Generate(rng, 50)
+		kV[key] = value
+		if len(kV) >= 1000 {
+			pipeline := client.Pipeline()
+			for k, v := range kV {
+				pipeline.Set(ctx, k, v, redis.KeepTTL)
+			}
+			exec, err := pipeline.Exec(ctx)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("批次 %d 执行结果:%v\n", i/1000, exec)
+			// 清空k_v,这种方式会被编译器优化，事实上比make(map[string]string, 1000)更快
+			for k := range kV {
+				delete(kV, k)
+			}
+		}
+		keyCount++
+		// 4是这个长度下sds结构体的占用
+		keySize := int64(32 + 16 + len(key) + 4 + len(value) + 4)
+		all += keySize
+	}
+
+	// 将kV中剩余的key也存进去
+	pipeline := client.Pipeline()
+	for k, v := range kV {
+		pipeline.Set(ctx, k, v, redis.KeepTTL)
+	}
+	pipeline.Exec(ctx)
+
+	// 300w的key, 其对应的bucket的数量是2^22=4194304
+	bucketCount := int64(4194304)
+	// 加上bucket的长度
+	all += bucketCount * 8
+	fmt.Println("Done...")
+	fmt.Printf("key数量：%d, 数据总大小(B)：%d, 数据总大小(MB)：%d", keyCount, all, all/1024/1024)
+
+	// 总内存消耗 = (`32` + `16` + `key_SDS`大小＋`val_SDS`大小) * key个数＋bucket个数 * 8
+	// len(key)=12 len(value)=70
+	// (48 + 16 + 74) * 3000000 + 4194304 * 8 = 414000000 + 33554432 = 447554432 = 426MB
+}
+
 // 单个key内存开销(jemalloc) = 32 + key_SDS大小 + 16 + 96 + (32 + field_SDS大小 + val_SDS大小) * field个数 + field_bucket个数 * 8
 func TestMemoryEvaluationSingleHash(t *testing.T) {
 	client := redis.NewClient(&redis.Options{
